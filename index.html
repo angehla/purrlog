@@ -388,7 +388,8 @@ try {
 } catch(e){}
 const S = () => state.settings;
 const family = () => (Array.isArray(S().family) && S().family.length ? S().family : DEFAULT_SETTINGS.family);
-const sortedCats = () => state.cats.slice().sort((a,b)=>(a.order??0)-(b.order??0) || String(a.name).localeCompare(b.name));
+const CAT_IDS = ["oreo","louis"];
+const sortedCats = () => state.cats.filter(c=>CAT_IDS.includes(c.id)).sort((a,b)=>(a.order??0)-(b.order??0) || String(a.name).localeCompare(b.name));
 const catById = id => state.cats.find(c=>c.id===id);
 let cacheTimer=null;
 function saveCache(){ clearTimeout(cacheTimer); cacheTimer=setTimeout(()=>lsSet(LS_CACHE, JSON.stringify({cats:state.cats, logs:state.logs, settings:state.settings})), 600); }
@@ -690,7 +691,7 @@ function header(){
 function banners(){
   let b="";
   if (state.dbState==="none") b+=`<div class="banner bad">${I.alert}<span>Shared storage isn't available in this view, so new logs can't be saved. Open Purrlog on claude.ai while signed in.${state.hadCache?" Showing the last saved copy.":""}</span></div>`;
-  else if (state.readOnly) b+=`<div class="banner warn">${I.alert}<span>You can see the logs but not add to them. Ask Angela to share Purrlog with you as an Editor.</span></div>`;
+  else if (state.readOnly) b+=`<div class="banner warn">${I.alert}<span>You can see the logs but not add to them. To log, Angela needs to invite you by email as an Editor and turn off the public link in the Share menu.</span></div>`;
   else if (state.stale) b+=`<div class="banner info">${I.alert}<span>Can't reach the shared log yet. ${state.hadCache?"What you see may be out of date.":"Waiting for data…"}</span></div>`;
   return b;
 }
@@ -699,8 +700,7 @@ function renderHome(){
   if (!cats.length){
     return `<div class="card stack" style="text-align:center;align-items:center">${state.synced||state.dbState==="none"?`
       <div style="width:150px">${catSprite({name:"New cat",coat:"solid",base:"#e8d9c8"},{face:"new"})}</div>
-      <h2>No cats yet</h2><p class="muted" style="margin:0">Add your first cat to start logging.</p>
-      <button class="btn" data-act="add-cat">${I.plus}Add a cat</button>`:`<p class="muted">Fetching your cats…</p>`}</div>`;
+      <h2>Oreo and Louis aren't here</h2><p class="muted" style="margin:0">Their profiles are missing from the shared log. Restore a backup from Settings, or ask Claude to add them back.</p>`:`<p class="muted">Fetching Oreo and Louis…</p>`}</div>`;
   }
   let h = `<section class="cats ${cats.length===1?"one":""}" aria-label="Your cats">`;
   for (const c of cats){
@@ -736,7 +736,7 @@ function renderHome(){
   return h;
 }
 function catSwitcher(cur){
-  return `<div class="chipsrow" role="group" aria-label="Choose cat">${sortedCats().map(c=>`<button class="catchip" data-act="open-cat" data-id="${esc(c.id)}" aria-pressed="${c.id===cur}">${catSprite(c,{headOnly:true,face:"content",bcs:stats(c).bcs??5})}${esc(c.name)}</button>`).join("")}<button class="catchip" data-act="add-cat" aria-pressed="false" style="padding-left:12px">${I.plus.replace('<svg','<svg style="width:18px;height:18px;background:none"')}Add</button></div>`;
+  return `<div class="chipsrow" role="group" aria-label="Choose cat">${sortedCats().map(c=>`<button class="catchip" data-act="open-cat" data-id="${esc(c.id)}" aria-pressed="${c.id===cur}">${catSprite(c,{headOnly:true,face:"content",bcs:stats(c).bcs??5})}${esc(c.name)}</button>`).join("")}</div>`;
 }
 function age(c){
   if (!c.birthday) return c.ageText ? esc(c.ageText) : "";
@@ -842,7 +842,7 @@ function renderSettings(){
   return `<section class="card"><div class="card-head"><h2>Who's logging on this phone</h2></div>
     <div class="row"><span class="pill neutral" style="font-size:14px;padding:5px 12px">${esc(state.who||"Not chosen")}</span><button class="btn ghost sm" data-act="pick-who">Change</button></div>
     <div class="small faint" style="margin-top:8px">Family: ${family().map(esc).join(", ")} <button class="btn plain sm" data-act="edit-family">Edit names</button></div></section>
-  <section class="card"><div class="card-head"><h2>Cats</h2><button class="btn ghost sm" data-act="add-cat">${I.plus}Add cat</button></div>
+  <section class="card"><div class="card-head"><h2>Cats</h2></div>
     ${sortedCats().map(c=>`<div class="catrow">${catSprite(c,{headOnly:true,face:"content",bcs:stats(c).bcs??5}).replace('class="sprite','class="mini sprite')}<div class="grow"><b>${esc(c.name)}</b><div class="small muted">${[age(c),COATS[c.coat],c.targetWeight?`target ${round1(c.targetWeight)} lb`:"",c.playGoal?`${c.playGoal} min play goal`:""].filter(Boolean).map(esc).join(" · ")}</div></div><button class="iconbtn" data-act="edit-cat" data-id="${esc(c.id)}" aria-label="Edit ${esc(c.name)}">${I.edit}</button><button class="iconbtn" data-act="csv" data-id="${esc(c.id)}" aria-label="Export ${esc(c.name)} CSV">${I.down}</button></div>`).join("")||`<div class="empty">No cats yet.</div>`}</section>
   <section class="card"><div class="card-head"><h2>Alert thresholds</h2><button class="btn ghost sm" data-act="edit-thresholds">${I.edit}Edit</button></div>
     <dl class="kv"><dt>Flag a day with fewer poops than</dt><dd>${st.poopMinPerDay||"Off"}</dd>
@@ -905,7 +905,7 @@ function confirmBox(title, body, okLabel, onOk){
 /* ---------- writes ---------- */
 function canWrite(){
   if (!state.db){ toast("Shared storage isn't connected, so this can't be saved."); return false; }
-  if (state.readOnly){ toast("You can view but not edit. Ask Angela to share as Editor."); return false; }
+  if (state.readOnly){ toast("You can view but not log. Angela needs to invite you as an Editor."); return false; }
   return true;
 }
 function writeErr(e){
@@ -1023,12 +1023,12 @@ function catForm(cat){
     <div class="two"><div class="field"><label for="c-target">Vet target weight (lb)</label><input type="number" id="c-target" name="targetWeight" inputmode="decimal" step="0.1" min="0.5" max="60" value="${c.targetWeight??""}"></div>
     <div class="field"><label for="c-goal">Daily play goal (min)</label><input type="number" id="c-goal" name="playGoal" inputmode="numeric" step="1" min="0" max="600" value="${c.playGoal??""}"></div></div>
     ${isNew?`<div class="field"><label for="c-w">Current weight (lb)</label><input type="number" id="c-w" name="weight" inputmode="decimal" step="0.01" min="0.5" max="60" placeholder="Optional, saved as today's weigh-in"></div>`:""}
-    <div class="acts">${isNew?"":`<button type="button" class="btn danger" id="delCat" style="margin-right:auto">${I.trash}Remove</button>`}<button type="button" class="btn plain" data-act="close">Cancel</button><button class="btn" type="submit">${isNew?"Add cat":"Save"}</button></div>
+    <div class="acts"><button type="button" class="btn plain" data-act="close">Cancel</button><button class="btn" type="submit">${isNew?"Add cat":"Save"}</button></div>
    </form>`, el=>{
     const f=$("#catf",el);
     const prev=()=>{ const fd=new FormData(f); $("#cprev",el).innerHTML=catSprite({name:fd.get("name"), coat:fd.get("coat"), base:fd.get("base"), pattern:fd.get("pattern")},{face:"happy", bcs: cat?stats(cat).bcs??5:5}); };
     f.addEventListener("input", prev); f.addEventListener("change", prev);
-    if (!isNew) $("#delCat",el).onclick=()=>{ const n=state.logs.filter(l=>l.catId===cat.id).length;
+    if (false) $("#delCat",el).onclick=()=>{ const n=state.logs.filter(l=>l.catId===cat.id).length;
       confirmBox(`Remove ${cat.name}?`, `This deletes ${esc(cat.name)} and ${plural(n,"entry","entries")} for everyone in the family. Download a backup first if you might want them later.`, `Remove ${cat.name}`, async()=>{
         if (!canWrite()) return; const ids=state.logs.filter(l=>l.catId===cat.id).map(l=>l.id);
         try { await pool(ids, 5, id=>state.db.collection("logs").doc(id).delete()); await withRetry(()=>state.db.collection("cats").doc(cat.id).delete());
@@ -1103,7 +1103,7 @@ $("#restoreFile").addEventListener("change", ev=>{
     const cats=d.cats.filter(c=>c&&typeof c.id==="string"&&c.id&&c.name).map(c=>({...c}));
     const logs=d.logs.filter(l=>l&&typeof l.id==="string"&&l.id&&okKinds.has(l.kind)&&l.catId&&l.at&&!isNaN(new Date(l.at)));
     const safeId=s=>/^[A-Za-z0-9_\-.~:@+]{1,200}$/.test(s)&&s!=="."&&s!=="..";
-    const cs=cats.filter(c=>safeId(c.id)), lg=logs.filter(l=>safeId(l.id));
+    const cs=cats.filter(c=>safeId(c.id)&&CAT_IDS.includes(c.id)), lg=logs.filter(l=>safeId(l.id)&&CAT_IDS.includes(l.catId));
     confirmBox("Restore from backup?", `This file has ${plural(cs.length,"cat")} and ${plural(lg.length,"entry","entries")} from ${esc(d.exportedAt?fmtDate(d.exportedAt,{month:"short",day:"numeric",year:"numeric"}):"an unknown date")}. Restoring puts them back for everyone. Entries in both places are replaced by the backup's version; anything added since the backup stays.`, "Restore", async()=>{
       if (!canWrite()) return;
       toast("Restoring… keep this page open.", null, null, 8000);
@@ -1135,8 +1135,7 @@ document.addEventListener("click", e=>{
     case "edit-log": { const l=state.logs.find(x=>x.id===id); if (l) logForm(l.kind, l.catId, l); break; }
     case "del-log": { const l=state.logs.find(x=>x.id===id); if (!l) break; const d=describe(l);
       confirmBox("Delete this entry?", `${esc(d.name)} ${esc(d.verb)} · ${esc(fmtWhen(l.at, isDateOnlyKind(l.kind)))}, logged by ${esc(l.by||"someone")}. It will be removed for everyone.`, "Delete", ()=>deleteLog(id)); break; }
-    case "add-cat": if (canWrite()) catForm(); break;
-    case "edit-cat": { const c=catById(id); if (c) catForm(c); break; }
+    case "edit-cat": { const c=catById(id); if (c && CAT_IDS.includes(c.id)) catForm(c); break; }
     case "edit-thresholds": thresholdsForm(); break;
     case "edit-family": familyForm(); break;
     case "csv": exportCsv(id); break;
